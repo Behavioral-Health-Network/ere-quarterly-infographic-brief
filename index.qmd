@@ -939,8 +939,8 @@ ere_race_table <- ere_race |>
 ere_gender <- ere_initiated |>
   mutate(
     gender_description_group = case_when(
-      gender_description == "Cisgender Man/Boy" ~ "Cisgender Boy",
-      gender_description == "Cisgender Woman/Girl" ~ "Cisgender Girl",
+      gender_description == "Cisgender Man/Boy" ~ "Cisgender Man",
+      gender_description == "Cisgender Woman/Girl" ~ "Cisgender Woman",
       TRUE ~ "Other"
     )
   ) |>
@@ -1143,6 +1143,8 @@ ere_matriculation <- ere_dismissed |>
 
 ere_matriculation_funnel <- ere_matriculation |> 
   select(Referrals, Eligible, Engaged, Admitted) |> 
+  rename(`Referrals Dismissed` = Referrals,
+         `Found Eligible` = Eligible) |> 
   pivot_longer(cols = everything(), names_to = "Matriculation", values_to = "Totals") |> 
   cbind(
     tibble(
@@ -1160,8 +1162,8 @@ ere_matriculation_funnel_plot <- ere_matriculation_funnel |>
             show.legend = FALSE) +
   geom_text(aes(x = 0, y = y, label = paste0(Matriculation, "\n", Totals)),
             size = 3, color = "white") +
-  scale_fill_manual(values = c("Referrals" = "#000000",
-                               "Eligible" = "#252561",
+  scale_fill_manual(values = c("Referrals Dismissed" = "#000000",
+                               "Found Eligible" = "#252561",
                                "Engaged" = "#4c68b5",
                                "Admitted" = "#9ab9cd")) + 
   theme_void()
@@ -1481,7 +1483,8 @@ ere_needs_table <- ere_needs_longer |>
             client_totals = n(),
             addressed = sum(if_else(needs == "Need Identified, Addressed", 1, 0)),
             .groups = "drop") |> 
-  mutate(percentage = addressed / identified,
+  mutate(goal = 0.6,
+         percentage = addressed / identified,
          symbol = case_when(percentage >= 0.6 ~ "✅"
                               , percentage < 0.6 ~ "✖️"
                               , TRUE ~ NA)
@@ -1493,7 +1496,7 @@ ere_needs_table <- ere_needs_longer |>
          Percentage = percentage
          ) |> 
   adorn_pct_formatting(
-    columns = c(Percentage),
+    columns = c(goal, Percentage),
     digits = 0
     ) |> 
   mutate(Percentage = paste0(Percentage, " ", symbol)) |> 
@@ -1503,10 +1506,11 @@ ere_needs_kable <- ere_needs_table |>
   knitr::kable(
     format = "html",
     align = c("c","c","c","c"),
-    col.names = c(paste0("Engaged",footnote_marker_symbol(1))
-                  , "1 ≥ Need Identified"
-                  , "1 ≥ Need Met"
-                  , "Percent"
+    col.names = c(paste0("Engaged",footnote_marker_symbol(1)),
+                  "1 ≥ Need Identified",
+                  "1 ≥ Need Met",
+                  "Goal",
+                  "Percent"
                   ),
     escape = FALSE
     # ,caption = ""
@@ -1521,7 +1525,12 @@ ere_needs_kable <- ere_needs_table |>
     0,
     color = "black",
     background = "#88CCEE"
-  )
+  ) |>
+  column_spec(1, width = "1.0cm") |>
+  column_spec(2, width = "1.5cm") |>
+  column_spec(3, width = "1.8cm") |>
+  column_spec(4, width = "0.5cm") |>
+  column_spec(5, width = "1.5cm")
 
 ```
 
@@ -1549,7 +1558,10 @@ ere_hosp_visit_inpatient <- ere_dismissed |>
 
 ere_hosp_visit <- ere_hosp_visit_ed |> 
   rbind(ere_hosp_visit_inpatient) |> 
-  mutate(percentage = case_when(is.na(hospital_visit_yes) & is.na(hospital_visit_opportunity) ~ NA
+  mutate(goal = case_when(hosp_visit_type == 'ED Response During Business Hours‡' ~ 0.5,
+                            hosp_visit_type == 'Inpatient Response' ~ 0.7,
+                            TRUE ~ NA),
+         percentage = case_when(is.na(hospital_visit_yes) & is.na(hospital_visit_opportunity) ~ NA
                                 ,is.na(hospital_visit_yes) ~ 0 
                                 , TRUE ~ hospital_visit_yes / hospital_visit_opportunity),
          symbol = case_when(hosp_visit_type == 'ED Response During Business Hours‡' & percentage >= 0.5 ~ "✅" ,
@@ -1559,7 +1571,7 @@ ere_hosp_visit <- ere_hosp_visit_ed |>
                             TRUE ~ NA)
          ) |> 
   adorn_pct_formatting(
-    columns = c(percentage),
+    columns = c(goal, percentage),
     digits = 0
     ) |> 
   mutate(percentage = paste0(percentage, " ", symbol)) |> 
@@ -1572,6 +1584,7 @@ ere_hosp_visit_kable <- ere_hosp_visit |>
     col.names = c(paste0("Referral Source",footnote_marker_symbol(1)),
                   paste0("Opportunities",footnote_marker_symbol(2)),
                   "Visits",
+                  "Goal",
                   "Percent"
                   ),
     escape = FALSE
@@ -1595,15 +1608,20 @@ ere_hosp_visit_kable <- ere_hosp_visit |>
     1,
     color = "black",
     bold = TRUE
-  ) 
+  ) |>
+  column_spec(1, width = "3.5cm") |>
+  column_spec(2, width = "1.5cm") |>
+  column_spec(3, width = "0.7cm") |>
+  column_spec(4, width = "0.5cm") |>
+  column_spec(5, width = "1.5cm")
 
 ```
 
 
 ::::: {.columns}
 
-::::{.column width="41%"}
-<center> <b> Client Needs^1^ (Goal: 60%) </b> </center>
+::::{.column width="49%"}
+<center> <b> Client Needs^1^ </b> </center>
 
 <!-- [^yfn]: *There is also a filter on dismissals where 'Unable To Locate/Make Contact Post-Referral'. -->
 
@@ -1615,9 +1633,10 @@ ere_needs_kable
 :::
 ::::
 
-::::{.column width="58%"}
-<center> <b> In-Person Hospital Visit Response^2^ (Goals: <sup>50%</sup>&frasl;<sub>70%</sub>) </b> </center>
+::::{.column width="51%"}
+<center> <b> In-Person Hospital Visit Response^2^ </b> </center>
 
+<!-- (Goals: <sup>50%</sup>&frasl;<sub>70%</sub>) -->
 <!-- [^hvn]: *Not all referrals are included in the sources noted. †A Hospital Visit Opportunity is a referral that: 1. does NOT have an open an active episode of care (is a re-referral) 2. is NOT a Reconnect or Transfer To Compass. ‡Business Hours are 8am to 4pm. -->
 
 ::: quarto-figure
